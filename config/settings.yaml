@@ -1,0 +1,33 @@
+claude:
+  max_tokens: 512
+  model: claude-haiku-4-5-20251001
+  temperature: 1.0
+image:
+  canvas_height: 1920
+  canvas_width: 1080
+  cleanup_after_post: true
+  output_dir: output/images
+  slides_per_post: 6
+platforms:
+  threads:
+    enabled: true
+    evening: true
+    morning: true
+  tiktok:
+    enabled: true
+    evening: true
+    morning: true
+  x:
+    enabled: true
+    evening: true
+    morning: true
+profile:
+  coconala_url: https://coconala.com/users/5372174
+  genre_rotation:
+  - 恋愛霊視
+  - タロット
+  - 魂の繋がり
+  name: マリナ
+schedule:
+  evening_time: '19:00'
+  morning_time: 08:00
