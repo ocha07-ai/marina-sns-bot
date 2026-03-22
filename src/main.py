@@ -20,6 +20,7 @@ load_dotenv()
 
 import generator
 import poster_x
+import poster_threads
 
 
 def load_settings():
@@ -67,6 +68,8 @@ def run(session: str, platform_filter: str = "all", test_mode: bool = False):
         # 投稿実行
         if platform == "x":
             poster_x.post(text, session)
+        elif platform == "threads":
+            poster_threads.post(text, session)
 
 
 def main():

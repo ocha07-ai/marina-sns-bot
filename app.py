@@ -17,6 +17,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 BASE_DIR      = Path(__file__).parent
 LOG_PATH      = BASE_DIR / "logs" / "post_log.jsonl"
 SETTINGS_PATH = BASE_DIR / "config" / "settings.yaml"
+ACCOUNTS_PATH = BASE_DIR / "data" / "target_accounts.json"
 
 PLATFORM_LABELS = {"x": "X (Twitter)", "threads": "Threads", "tiktok": "TikTok"}
 SESSION_LABELS  = {"morning": "朝投稿", "evening": "夜投稿"}
@@ -486,6 +487,18 @@ def today_stats(df):
 def api_ok():
     return bool(os.environ.get("ANTHROPIC_API_KEY","").strip())
 
+def load_accounts():
+    ACCOUNTS_PATH.parent.mkdir(exist_ok=True)
+    if not ACCOUNTS_PATH.exists():
+        return []
+    with open(ACCOUNTS_PATH, encoding="utf-8") as f:
+        return json.load(f)
+
+def save_accounts(accounts):
+    ACCOUNTS_PATH.parent.mkdir(exist_ok=True)
+    with open(ACCOUNTS_PATH, "w", encoding="utf-8") as f:
+        json.dump(accounts, f, ensure_ascii=False, indent=2)
+
 
 # ── サイドバー ─────────────────────────────────────────────
 with st.sidebar:
@@ -502,7 +515,7 @@ with st.sidebar:
 
     page = st.radio(
         "nav",
-        ["ダッシュボード", "投稿管理", "投稿履歴", "設定"],
+        ["ダッシュボード", "投稿管理", "アクション管理", "投稿履歴", "設定"],
         label_visibility="collapsed",
     )
 
@@ -728,7 +741,7 @@ elif page == "投稿管理":
             """, unsafe_allow_html=True)
         else:
             edited = st.text_area("", value=st.session_state["gen_text"], height=180, label_visibility="collapsed")
-            limit  = 140 if st.session_state.get("gen_platform")=="x" else 400
+            limit  = 125 if st.session_state.get("gen_platform")=="x" else 400
             cnt    = len(edited)
             pct    = min(cnt/limit*100, 100)
             bar_c  = C_RED if cnt > limit else C_BLUE
@@ -742,6 +755,15 @@ elif page == "投稿管理":
                 </div>
             </div>
             """, unsafe_allow_html=True)
+
+            if st.session_state.get("gen_platform") == "x":
+                cta_text = "🔮 彼の気持ち・本音・ご縁の流れ…\nタロット×霊視で個別に視ます。\nご予約・詳細はこちら👇\nhttps://coconala.com/users/5372174"
+                st.markdown(f"""
+                <div style="background:#F7F8FA;border:1px solid {C_BORDER};border-radius:4px;padding:12px 14px;margin-top:8px;">
+                    <div style="font-size:0.72rem;font-weight:700;color:{C_MUTED};letter-spacing:0.08em;margin-bottom:6px;">↳ CTAツリー（自動追加）</div>
+                    <div style="font-size:0.85rem;color:{C_TEXT};white-space:pre-wrap;">{cta_text}</div>
+                </div>
+                """, unsafe_allow_html=True)
 
             st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
             c1,c2 = st.columns(2)
@@ -769,6 +791,171 @@ elif page == "投稿管理":
                     st.rerun()
 
         st.markdown("</div></div>", unsafe_allow_html=True)
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+
+# ── ページ: アクション管理 ───────────────────────────────
+elif page == "アクション管理":
+    st.markdown(f"""
+    <div class="topbar">
+        <div>
+            <div class="topbar-title">アクション管理</div>
+            <div class="breadcrumb">
+                <span>Home</span><span class="breadcrumb-sep">›</span>
+                <span style="color:{C_BLUE}">アクション管理</span>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown('<div class="page-content">', unsafe_allow_html=True)
+
+    accounts = load_accounts()
+    today_str = date.today().isoformat()
+
+    # 朝リサーチ
+    SEARCH_TAGS = [
+        ("#恋愛占い", "lang:ja -is:retweet"),
+        ("#復縁", "lang:ja -is:retweet"),
+        ("#婚活", "lang:ja -is:retweet"),
+        ("#タロット", "lang:ja -is:retweet"),
+        ("#霊視", "lang:ja -is:retweet"),
+    ]
+
+    st.markdown(f'<div class="card"><div class="card-header"><span class="card-header-title">朝リサーチ</span><span style="font-size:0.75rem;color:{C_MUTED};">ハッシュタグ検索でアカウントを自動抽出</span></div><div class="card-body">', unsafe_allow_html=True)
+
+    if st.button("リサーチ実行（#恋愛占い #復縁 #婚活 #タロット #霊視）", type="primary"):
+        with st.spinner("X APIで検索中…"):
+            try:
+                import researcher
+                results, errors = researcher.research_accounts(max_per_query=10)
+                st.caption(f"検索結果: {len(results)}件取得")
+                if errors:
+                    for e in errors:
+                        st.warning(f"エラー: {e}")
+                existing_urls = {a["url"] for a in accounts}
+                new_accounts = [r for r in results if r["url"] not in existing_urls]
+                if new_accounts:
+                    accounts.extend(new_accounts)
+                    save_accounts(accounts)
+                    st.success(f"{len(new_accounts)}件追加しました（取得:{len(results)}件 / 新規:{len(new_accounts)}件）")
+                elif results:
+                    st.info(f"{len(results)}件取得しましたが、全て登録済みです")
+                else:
+                    st.warning("アカウントが取得できませんでした")
+            except Exception as e:
+                st.error(f"エラー: {e}")
+
+    st.markdown("</div></div>", unsafe_allow_html=True)
+
+    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+
+    # 今日のアクションリスト
+    pending = [a for a in accounts if a.get("last_action") != today_str]
+    done    = [a for a in accounts if a.get("last_action") == today_str]
+
+    col_l, col_r = st.columns([3, 2], gap="medium")
+
+    with col_l:
+        # 今日やること
+        st.markdown(f"""
+        <div class="card">
+            <div class="card-header">
+                <span class="card-header-title">今日のアクションリスト</span>
+                <span style="font-size:0.75rem;color:{C_MUTED};">{len(pending)}件 残り</span>
+            </div>
+            <div class="card-body" style="padding:0 20px;">
+        """, unsafe_allow_html=True)
+
+        if not pending:
+            st.markdown(f'<div style="padding:32px 0;text-align:center;color:{C_GREEN};font-size:0.875rem;font-weight:600;">✓ 今日のアクション完了！</div>', unsafe_allow_html=True)
+        else:
+            tag_colors = {"いいね": C_BLUE, "リプライ": C_ORANGE, "両方": C_GREEN}
+            for i, acc in enumerate(pending):
+                tag_c = tag_colors.get(acc.get("tag","いいね"), C_BLUE)
+                st.markdown(f"""
+                <div class="activity-item">
+                    <div class="activity-content">
+                        <div class="activity-title"><a href="{acc['url']}" target="_blank" style="color:{C_TEXT};text-decoration:none;">{acc['name']} ↗</a></div>
+                        <div class="activity-sub" style="font-size:0.72rem;">{acc.get('note','')}</div>
+                    </div>
+                    <span class="badge" style="background:{tag_c};">{acc.get('tag','いいね')}</span>
+                </div>
+                """, unsafe_allow_html=True)
+                if st.button("✓ 完了", key=f"done_{i}"):
+                    for a in accounts:
+                        if a["url"] == acc["url"]:
+                            a["last_action"] = today_str
+                    save_accounts(accounts)
+                    st.rerun()
+
+        st.markdown("</div></div>", unsafe_allow_html=True)
+
+        # 完了済み
+        if done:
+            st.markdown(f"""
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-header-title">完了済み（今日）</span>
+                    <span style="font-size:0.75rem;color:{C_MUTED};">{len(done)}件</span>
+                </div>
+                <div class="card-body" style="padding:0 20px;">
+            """, unsafe_allow_html=True)
+            for acc in done:
+                st.markdown(f"""
+                <div class="activity-item">
+                    <div class="activity-content">
+                        <div class="activity-title" style="color:{C_MUTED};">✓ {acc['name']}</div>
+                        <div class="activity-sub">{acc['url']}</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            st.markdown("</div></div>", unsafe_allow_html=True)
+
+    with col_r:
+        # アカウント追加
+        st.markdown(f"""
+        <div class="card">
+            <div class="card-header"><span class="card-header-title">アカウントを追加</span></div>
+            <div class="card-body">
+        """, unsafe_allow_html=True)
+
+        new_name = st.text_input("アカウント名（表示用）")
+        new_url  = st.text_input("X のURL", placeholder="https://x.com/username")
+        new_tag  = st.selectbox("アクション種別", ["いいね", "リプライ", "両方"])
+        new_note = st.text_input("メモ（任意）", placeholder="占い師・婚活系など")
+
+        if st.button("追加する", type="primary"):
+            if new_name and new_url:
+                accounts.append({"name": new_name, "url": new_url, "tag": new_tag, "note": new_note, "last_action": ""})
+                save_accounts(accounts)
+                st.success("追加しました")
+                st.rerun()
+            else:
+                st.error("名前とURLを入力してください")
+
+        st.markdown("</div></div>", unsafe_allow_html=True)
+
+        # 登録済み一覧・削除
+        if accounts:
+            st.markdown(f"""
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-header-title">登録済み（{len(accounts)}件）</span>
+                </div>
+                <div class="card-body" style="padding:0 20px;">
+            """, unsafe_allow_html=True)
+            for i, acc in enumerate(accounts):
+                c1, c2 = st.columns([4, 1])
+                with c1:
+                    st.markdown(f'<div style="font-size:0.85rem;color:{C_TEXT};padding:10px 0;border-bottom:1px solid {C_BORDER};">{acc["name"]}<br><span style="font-size:0.72rem;color:{C_MUTED};">{acc.get("tag","")}</span></div>', unsafe_allow_html=True)
+                with c2:
+                    if st.button("削除", key=f"del_{i}"):
+                        accounts.pop(i)
+                        save_accounts(accounts)
+                        st.rerun()
+            st.markdown("</div></div>", unsafe_allow_html=True)
 
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -846,6 +1033,7 @@ elif page == "設定":
             st.markdown(f'<div class="card"><div class="card-header"><span class="card-header-title">投稿スケジュール</span></div><div class="card-body">', unsafe_allow_html=True)
             morning_time = st.text_input("朝投稿の時間", value=settings["schedule"]["morning_time"])
             evening_time = st.text_input("夜投稿の時間", value=settings["schedule"]["evening_time"])
+            st.caption("⚠️ 時間を変更した場合はタスクスケジューラーも手動で更新してください")
             st.markdown("</div></div>", unsafe_allow_html=True)
 
         with cp:

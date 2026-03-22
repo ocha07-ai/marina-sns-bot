@@ -30,6 +30,11 @@ def post(text: str, session: str) -> bool:
 
         response = client.create_tweet(text=text)
         post_id = str(response.data["id"])
+
+        # CTAをツリーで追加
+        cta_text = "🔮 彼の気持ち・本音・ご縁の流れ…\nタロット×霊視で個別に視ます。\nご予約・詳細はこちら👇\nhttps://coconala.com/users/5372174"
+        client.create_tweet(text=cta_text, in_reply_to_tweet_id=post_id)
+
         log("x", session, "success", post_id=post_id)
         return True
 
