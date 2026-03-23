@@ -63,15 +63,19 @@ def post(text: str, session: str) -> bool:
         )
         if r3.ok:
             cta_creation_id = r3.json()["id"]
-            requests.post(
+            r4 = requests.post(
                 f"{GRAPH_URL}/{user_id}/threads_publish",
                 data={
                     "creation_id": cta_creation_id,
                     "access_token": token,
                 },
             )
+            if not r4.ok:
+                print(f"[THREADS CTA publish error] {r4.status_code}: {r4.text}")
+        else:
+            print(f"[THREADS CTA container error] {r3.status_code}: {r3.text}")
 
-        log("threads", session, "success", post_id=post_id)
+        log("threads", session, "success", post_id=post_id, text=text)
         return True
 
     except Exception as e:

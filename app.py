@@ -515,7 +515,7 @@ with st.sidebar:
 
     page = st.radio(
         "nav",
-        ["ダッシュボード", "投稿管理", "アクション管理", "投稿履歴", "設定"],
+        ["ダッシュボード", "投稿管理", "アクション管理", "分析", "投稿履歴", "設定"],
         label_visibility="collapsed",
     )
 
@@ -883,12 +883,28 @@ elif page == "アクション管理":
                     <span class="badge" style="background:{tag_c};">{acc.get('tag','いいね')}</span>
                 </div>
                 """, unsafe_allow_html=True)
-                if st.button("✓ 完了", key=f"done_{i}"):
-                    for a in accounts:
-                        if a["url"] == acc["url"]:
-                            a["last_action"] = today_str
-                    save_accounts(accounts)
-                    st.rerun()
+                btn_col, chk_col = st.columns([2, 3])
+                with btn_col:
+                    if st.button("✓ 完了", key=f"done_{i}"):
+                        for a in accounts:
+                            if a["url"] == acc["url"]:
+                                a["last_action"] = today_str
+                        save_accounts(accounts)
+                        st.rerun()
+                with chk_col:
+                    followed = acc.get("followed", False)
+                    if st.checkbox("フォロー済み", value=followed, key=f"follow_{i}"):
+                        if not followed:
+                            for a in accounts:
+                                if a["url"] == acc["url"]:
+                                    a["followed"] = True
+                            save_accounts(accounts)
+                            st.rerun()
+                    elif followed:
+                        for a in accounts:
+                            if a["url"] == acc["url"]:
+                                a["followed"] = False
+                        save_accounts(accounts)
 
         st.markdown("</div></div>", unsafe_allow_html=True)
 
@@ -903,10 +919,11 @@ elif page == "アクション管理":
                 <div class="card-body" style="padding:0 20px;">
             """, unsafe_allow_html=True)
             for acc in done:
+                follow_badge = f'<span class="badge" style="background:{C_GREEN};margin-left:6px;">フォロー済</span>' if acc.get("followed") else ""
                 st.markdown(f"""
                 <div class="activity-item">
                     <div class="activity-content">
-                        <div class="activity-title" style="color:{C_MUTED};">✓ {acc['name']}</div>
+                        <div class="activity-title" style="color:{C_MUTED};">✓ {acc['name']}{follow_badge}</div>
                         <div class="activity-sub">{acc['url']}</div>
                     </div>
                 </div>
@@ -958,6 +975,88 @@ elif page == "アクション管理":
             st.markdown("</div></div>", unsafe_allow_html=True)
 
     st.markdown('</div>', unsafe_allow_html=True)
+
+
+# ── ページ: 分析 ─────────────────────────────────────────
+elif page == "分析":
+    st.markdown(f"""
+    <div class="topbar">
+        <div>
+            <div class="topbar-title">分析</div>
+            <div class="topbar-sub">投稿パフォーマンスと勝ちパターン</div>
+        </div>
+    </div>""", unsafe_allow_html=True)
+
+    if st.button("メトリクスを取得", type="primary"):
+        with st.spinner("X・Threads APIからデータ取得中…"):
+            try:
+                sys.path.insert(0, os.path.join(BASE_DIR, "src"))
+                import metrics as metrics_mod
+                records = metrics_mod.load_logs_with_metrics()
+                st.session_state["analysis_records"] = records
+            except Exception as e:
+                st.error(f"エラー: {e}")
+
+    records = st.session_state.get("analysis_records", [])
+
+    if records:
+        import pandas as pd
+
+        df = pd.DataFrame(records)
+        df["impressions"] = df["metrics"].apply(lambda m: m.get("impressions", 0) if isinstance(m, dict) else 0)
+        df["likes"]       = df["metrics"].apply(lambda m: m.get("likes", 0) if isinstance(m, dict) else 0)
+        df["retweets"]    = df["metrics"].apply(lambda m: m.get("retweets", 0) if isinstance(m, dict) else 0)
+        df["date"]        = pd.to_datetime(df["timestamp"]).dt.date
+        df["weekday"]     = pd.to_datetime(df["timestamp"]).dt.strftime("%a")
+
+        # KPIサマリー
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("総投稿数", len(df))
+        col2.metric("平均インプ", f"{df['impressions'].mean():.0f}")
+        col3.metric("最高インプ", df["impressions"].max())
+        col4.metric("総いいね", df["likes"].sum())
+
+        st.divider()
+
+        # 上位投稿ランキング
+        st.markdown(f'<div class="card"><div class="card-header"><span class="card-header-title">上位投稿ランキング</span></div><div class="card-body">', unsafe_allow_html=True)
+        top = df[df["impressions"] > 0].sort_values("impressions", ascending=False).head(10)
+        for _, row in top.iterrows():
+            st.markdown(f"""
+            <div style="border:1px solid {C_BORDER};border-radius:6px;padding:12px;margin-bottom:8px;">
+                <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+                    <span style="font-size:0.75rem;color:{C_MUTED};">{row['platform'].upper()} | {row['session']} | {row['date']}</span>
+                    <span style="font-weight:700;color:{C_BLUE};">👁 {row['impressions']} ❤️ {row['likes']} 🔁 {row['retweets']}</span>
+                </div>
+                <div style="font-size:0.82rem;white-space:pre-wrap;">{str(row.get('text',''))[:120]}{'…' if len(str(row.get('text',''))) > 120 else ''}</div>
+            </div>
+            """, unsafe_allow_html=True)
+        st.markdown("</div></div>", unsafe_allow_html=True)
+
+        st.divider()
+
+        col_a, col_b = st.columns(2)
+
+        # 朝夜比較
+        with col_a:
+            st.markdown(f'<div class="card"><div class="card-header"><span class="card-header-title">朝・夜 平均インプ</span></div><div class="card-body">', unsafe_allow_html=True)
+            session_avg = df.groupby("session")["impressions"].mean().reset_index()
+            session_avg.columns = ["セッション", "平均インプ"]
+            session_avg["セッション"] = session_avg["セッション"].map({"morning": "朝", "evening": "夜"})
+            st.bar_chart(session_avg.set_index("セッション"))
+            st.markdown("</div></div>", unsafe_allow_html=True)
+
+        # 曜日別比較
+        with col_b:
+            st.markdown(f'<div class="card"><div class="card-header"><span class="card-header-title">曜日別 平均インプ</span></div><div class="card-body">', unsafe_allow_html=True)
+            day_order = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+            day_avg = df.groupby("weekday")["impressions"].mean().reindex(day_order).dropna().reset_index()
+            day_avg.columns = ["曜日", "平均インプ"]
+            st.bar_chart(day_avg.set_index("曜日"))
+            st.markdown("</div></div>", unsafe_allow_html=True)
+
+    else:
+        st.info("「メトリクスを取得」ボタンを押してデータを読み込んでください")
 
 
 # ── ページ: 投稿履歴 ─────────────────────────────────────
