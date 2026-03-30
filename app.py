@@ -12,6 +12,13 @@ import yaml
 from dotenv import load_dotenv
 
 load_dotenv()
+# Streamlit Community Cloud: st.secrets → os.environ ブリッジ
+try:
+    for _k, _v in st.secrets.items():
+        if _k not in os.environ:
+            os.environ[_k] = str(_v)
+except Exception:
+    pass
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
 BASE_DIR      = Path(__file__).parent

@@ -1,0 +1,83 @@
+name: Marina SNS Bot
+
+on:
+  schedule:
+    # 朝投稿: 8:00 JST = 23:00 UTC (前日)
+    - cron: '0 23 * * *'
+    # 夜投稿: 21:00 JST = 12:00 UTC
+    - cron: '0 12 * * *'
+  workflow_dispatch:
+    inputs:
+      session:
+        description: 'Session to run'
+        required: true
+        default: 'morning'
+        type: choice
+        options:
+          - morning
+          - evening
+      test_mode:
+        description: 'Test mode (no actual posting)'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Determine session
+        id: session
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "name=${{ github.event.inputs.session }}" >> $GITHUB_OUTPUT
+            echo "test=${{ github.event.inputs.test_mode }}" >> $GITHUB_OUTPUT
+          elif [ "$(date -u +%H)" = "23" ]; then
+            echo "name=morning" >> $GITHUB_OUTPUT
+            echo "test=false" >> $GITHUB_OUTPUT
+          else
+            echo "name=evening" >> $GITHUB_OUTPUT
+            echo "test=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run bot
+        env:
+          ANTHROPIC_API_KEY:     ${{ secrets.ANTHROPIC_API_KEY }}
+          X_API_KEY:             ${{ secrets.X_API_KEY }}
+          X_API_SECRET:          ${{ secrets.X_API_SECRET }}
+          X_ACCESS_TOKEN:        ${{ secrets.X_ACCESS_TOKEN }}
+          X_ACCESS_SECRET:       ${{ secrets.X_ACCESS_SECRET }}
+          X_BEARER_TOKEN:        ${{ secrets.X_BEARER_TOKEN }}
+          THREADS_ACCESS_TOKEN:  ${{ secrets.THREADS_ACCESS_TOKEN }}
+          THREADS_USER_ID:       ${{ secrets.THREADS_USER_ID }}
+          IMGBB_API_KEY:         ${{ secrets.IMGBB_API_KEY }}
+          GH_TOKEN:              ${{ secrets.GH_TOKEN }}
+          GH_REPO:               ${{ github.repository }}
+        run: |
+          TEST_FLAG=""
+          if [ "${{ steps.session.outputs.test }}" = "true" ]; then
+            TEST_FLAG="--test"
+          fi
+          python src/main.py --session ${{ steps.session.outputs.name }} $TEST_FLAG
+
+      - name: Commit and push logs
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add logs/ data/
+          git diff --cached --quiet || (git commit -m "chore: update post log [skip ci]" && git push)

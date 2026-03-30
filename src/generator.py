@@ -55,49 +55,21 @@ TAROT_CARDS = [
 
 
 def get_morning_theme() -> dict:
-    """日付ベースで朝テーマをローテーション（毎日変わる）"""
-    today = datetime.now()
-    day_of_year = today.timetuple().tm_yday
-
-    # 12日サイクルで星座をローテーション
-    zodiac, month_label = ZODIAC_WITH_MONTH[day_of_year % 12]
-
-    # テーマは3種類をローテーション
-    theme_type = day_of_year % 3
-
-    if theme_type == 0:
-        # 星座占い（直接語りかけ）
-        theme = f"今日の星座占い〜{zodiac}のあなたへ〜"
-        extra = (
-            f"今日は{zodiac}（{month_label}）の方への恋愛メッセージです。\n"
-            f"書き出しは「{zodiac}のあなたへ」または「{month_label}のあなたへ」で始めてください。\n"
-            f"その星座の性質（例：蟹座なら感情豊か・直感的など）を踏まえた、\n"
-            f"今日の恋愛・人間関係への具体的なメッセージを書いてください。\n"
-            f"他の星座の人も「これ私のことかも」と感じるよう、感情描写を丁寧に。"
-        )
-    elif theme_type == 1:
-        # タロットカード（具体的なカード名）
-        card = TAROT_CARDS[day_of_year % len(TAROT_CARDS)]
-        theme = f"今日のタロット〜{card}〜"
-        extra = (
-            f"今日のカードは「{card}」です。\n"
-            f"書き出しは「今日のカードは{card}」で始めてください。\n"
-            f"このカードが今日の恋愛・復縁・婚活に伝えるメッセージを、\n"
-            f"「{card}が出たあなたへ」という語りかけの形で書いてください。\n"
-            f"カードの意味を難しくなく、恋愛の具体的な場面に落とし込んで。"
-        )
-    else:
-        # 誕生月占い
-        theme = f"今日の誕生月占い〜{month_label}のあなたへ〜"
-        extra = (
-            f"今日は{month_label}の方への恋愛メッセージです。\n"
-            f"書き出しは「{month_label}のあなたへ」で始めてください。\n"
-            f"その月生まれの人が持つ特性・恋愛傾向を踏まえた、\n"
-            f"今日実践できる具体的なアドバイスまたは気づきを届けてください。\n"
-            f"読んだ人が「なんで私のことわかるの？」と感じるくらい具体的に。"
-        )
-
-    return {"theme": theme, "extra": extra}
+    """日付ベースで朝テーマを決定する。
+    朝投稿は常にタロットカード形式で統一（画像付き投稿のため）。
+    22枚の大アルカナを日付でローテーション。
+    """
+    day_of_year = datetime.now().timetuple().tm_yday
+    card = TAROT_CARDS[day_of_year % len(TAROT_CARDS)]
+    theme = f"今日のタロット〜{card}〜"
+    extra = (
+        f"今日のカードは「{card}」です。\n"
+        f"書き出しは「今日のカードは{card}」で始めてください。\n"
+        f"このカードが今日の恋愛・復縁・婚活に伝えるメッセージを、\n"
+        f"「{card}が出たあなたへ」という語りかけの形で書いてください。\n"
+        f"カードの意味を難しくなく、恋愛の具体的な場面に落とし込んで。"
+    )
+    return {"theme": theme, "extra": extra, "theme_type": 1, "card": card}
 
 
 def load_config():
@@ -114,16 +86,18 @@ def get_genre() -> str:
     return WEEKDAY_GENRE[datetime.now().weekday()]
 
 
-def generate(session: str, platform: str) -> str:
+def generate(session: str, platform: str, insights: str = "") -> tuple[str, dict]:
     """
     コンテンツを生成して返す
 
     Args:
-        session: "morning" または "evening"
+        session:  "morning" または "evening"
         platform: "x" または "threads"
+        insights: PDCAアナライザーが生成したインサイトテキスト（任意）
 
     Returns:
-        生成された投稿テキスト
+        (生成された投稿テキスト, メタ情報dict)
+        メタ情報: {"genre": str, "theme_type": int|None}
     """
     settings, prompts = load_config()
     client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
@@ -141,6 +115,10 @@ def generate(session: str, platform: str) -> str:
         coconala_url=settings["profile"]["coconala_url"],
     )
 
+    # PDCAインサイトをプロンプト末尾に追加
+    if insights:
+        user_prompt = user_prompt + "\n\n" + insights
+
     response = client.messages.create(
         model=settings["claude"]["model"],
         max_tokens=settings["claude"]["max_tokens"],
@@ -148,13 +126,26 @@ def generate(session: str, platform: str) -> str:
         messages=[{"role": "user", "content": user_prompt}],
     )
 
-    return response.content[0].text.strip()
+    text = response.content[0].text.strip()
+
+    # メタ情報（ロギング・次サイクルの分析・画像生成用）
+    meta = {
+        "genre":      genre if session == "evening" else "",
+        "theme_type": morning["theme_type"] if session == "morning" else None,
+        "card":       morning.get("card") if session == "morning" else None,
+    }
+
+    return text, meta
 
 
 if __name__ == "__main__":
     # テスト用: python src/generator.py
     print("=== 朝 / X ===")
-    print(generate("morning", "x"))
+    text, meta = generate("morning", "x")
+    print(text)
+    print(f"[meta] {meta}")
     print()
     print("=== 夜 / X ===")
-    print(generate("evening", "x"))
+    text, meta = generate("evening", "x")
+    print(text)
+    print(f"[meta] {meta}")
