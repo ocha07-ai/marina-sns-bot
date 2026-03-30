@@ -46,8 +46,14 @@ COLOR_BG_END   = (25, 15, 55)
 
 
 def _get_font(size: int) -> ImageFont.FreeTypeFont:
-    """日本語フォントを取得（複数フォールバック）"""
+    """日本語フォントを取得（Windows / Linux 両対応）"""
     candidates = [
+        # Linux (GitHub Actions / Ubuntu)
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/noto-cjk/NotoSansCJK-Bold.ttc",
+        "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
+        # Windows
         "C:/Windows/Fonts/YuGothB.ttc",
         "C:/Windows/Fonts/meiryob.ttc",
         "C:/Windows/Fonts/meiryo.ttc",
