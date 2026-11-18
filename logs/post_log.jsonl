@@ -987,3 +987,5 @@
 {"timestamp": "2026-11-17T04:52:39", "platform": "threads", "session": "evening", "status": "error", "post_id": "", "error": "トークンが無効です。手動で再取得してください。", "text": "", "genre": "", "theme_type": null}
 {"timestamp": "2026-11-17T20:38:15", "platform": "x", "session": "evening", "status": "error", "post_id": "", "error": "402 Payment Required\ncredits depleted", "text": "", "genre": "", "theme_type": null}
 {"timestamp": "2026-11-17T20:39:07", "platform": "threads", "session": "evening", "status": "error", "post_id": "", "error": "トークンが無効です。手動で再取得してください。", "text": "", "genre": "", "theme_type": null}
+{"timestamp": "2026-11-18T03:57:54", "platform": "x", "session": "evening", "status": "error", "post_id": "", "error": "402 Payment Required\ncredits depleted", "text": "", "genre": "", "theme_type": null}
+{"timestamp": "2026-11-18T03:58:23", "platform": "threads", "session": "evening", "status": "error", "post_id": "", "error": "トークンが無効です。手動で再取得してください。", "text": "", "genre": "", "theme_type": null}
